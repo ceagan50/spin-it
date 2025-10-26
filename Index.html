@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spin the Wheel</title>
+  <style>
+    :root{
+      --bg:#000000dd;
+      --white:#fff;
+      --black:#000;
+      --accent:#ff3333;
+    }
+    html,body{height:100%;margin:0}
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:var(--bg);
+      font-family:Arial, Helvetica, sans-serif;
+      color:var(--white);
+      padding:16px;
+      box-sizing:border-box;
+    }
+
+    #container{
+      width:100%;
+      max-width:460px;
+      text-align:center;
+    }
+
+    #header{margin:0 0 8px 0;font-size:20px}
+    .controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+    input[type="text"]{padding:10px;border-radius:8px;border:1px solid #ccc;font-size:16px;width:60%}
+    button{padding:10px 14px;border-radius:8px;border:none;background:var(--white);color:var(--black);font-weight:bold;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid #fff;color:#fff}
+    button:disabled{opacity:.5;cursor:not-allowed}
+
+    .wheelWrap{
+      position:relative;
+      width:90vw;max-width:380px;height:90vw;max-height:380px;margin:8px auto;
+    }
+
+    svg#wheel{width:100%;height:100%;display:block;transform-origin:50% 50%}
+    .pointer{
+      position:absolute;
+      top:-8px;
+      left:50%;
+      transform:translateX(-50%);
+      width:0;height:0;
+      border-left:14px solid transparent;
+      border-right:14px solid transparent;
+      border-bottom:24px solid var(--accent);
+      z-index:20;
+    }
+
+    #caption{color:#ddd;margin-top:8px;font-size:15px}
+    #result{margin-top:12px;font-size:18px;font-weight:bold}
+    @media (max-width:420px){
+      input[type="text"]{width:100%}
+      button{font-size:14px}
+      #header{font-size:18px}
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h2 id="header">Spin the Wheel</h2>
+
+    <div class="controls">
+      <input id="nameInput" type="text" placeholder="Enter your name">
+      <button id="submitName">Submit</button>
+      <button id="resetName" class="secondary" style="display:none">Change Name</button>
+    </div>
+
+    <div class="wheelWrap">
+      <div class="pointer" aria-hidden="true"></div>
+      <svg id="wheel" viewBox="0 0 100 100" role="img" aria-label="Prize wheel">
+        <g id="wheelGroup"></g>
+      </svg>
+    </div>
+
+    <div id="caption">Spin the wheel naye at ur own risk 😈</div>
+
+    <div style="margin-top:12px">
+      <button id="spin" disabled>Spin</button>
+      <button id="spinAgain" class="secondary" style="display:none">Spin Again</button>
+    </div>
+
+    <div id="result" aria-live="polite"></div>
+  </div>
+
+  <script>
+    // ---- configuration ----
+    const sections = [
+      { text: 'Death', color: 'black', textColor: 'white' },
+      { text: '500k €', color: 'white', textColor: 'black' },
+      { text: '1 Mio €', color: 'white', textColor: 'black' },
+      { text: '10 Mio €', color: 'white', textColor: 'black' },
+      { text: '100 Mio €', color: 'white', textColor: 'black' },
+      { text: '1 Bil. €', color: 'white', textColor: 'black' },
+      { text: '10 Bil. €', color: 'white', textColor: 'black' },
+      { text: 'Be\nSerious\n😂', color: 'white', textColor: 'black' }
+    ];
+    const pointerAngle = 270; // pointer pointing straight up (top)
+    const wheel = document.getElementById('wheel');
+    const group = document.getElementById('wheelGroup');
+    const spinBtn = document.getElementById('spin');
+    const spinAgainBtn = document.getElementById('spinAgain');
+    const resultDiv = document.getElementById('result');
+    const submitName = document.getElementById('submitName');
+    const resetName = document.getElementById('resetName');
+    const nameInput = document.getElementById('nameInput');
+    const caption = document.getElementById('caption');
+
+    const num = sections.length;
+    const angle = 360 / num;
+    let currentRotation = 0;
+    let spinning = false;
+    let username = '';
+
+    // Draw wheel slices and text (text kept upright)
+    function buildWheel(){
+      group.innerHTML = '';
+      for(let i = 0; i < num; i++){
+        const start = i * angle;
+        const end = start + angle;
+        const startRad = (start) * Math.PI/180;
+        const endRad = (end) * Math.PI/180;
+        const x1 = 50 + 50*Math.cos(startRad);
+        const y1 = 50 + 50*Math.sin(startRad);
+        const x2 = 50 + 50*Math.cos(endRad);
+        const y2 = 50 + 50*Math.sin(endRad);
+        const largeArc = angle > 180 ? 1 : 0;
+        const pathD = `M50 50 L ${x1} ${y1} A 50 50 0 ${largeArc} 1 ${x2} ${y2} Z`;
+        const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.setAttribute('d', pathD);
+        path.setAttribute('fill', sections[i].color);
+        path.setAttribute('stroke', 'black');
+        path.setAttribute('stroke-width','0.6');
+        group.appendChild(path);
+
+        // text position - upright (no rotation)
+        const textAngle = start + angle/2;
+        const textRad = textAngle * Math.PI/180;
+        const tx = 50 + 28 * Math.cos(textRad);
+        const ty = 50 + 28 * Math.sin(textRad);
+
+        const lines = sections[i].text.split('\n');
+        const baseY = ty - ((lines.length-1) * 2); // adjust spacing
+        for(let j = 0; j < lines.length; j++){
+          const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t.setAttribute('x', tx);
+          t.setAttribute('y', baseY + j*4); // 4 units per line
+          t.setAttribute('fill', sections[i].textColor);
+          t.setAttribute('font-size','4');
+          t.setAttribute('font-weight','bold');
+          t.setAttribute('text-anchor','middle');
+          t.style.userSelect = 'none';
+          t.textContent = lines[j];
+          group.appendChild(t);
+        }
+      }
+    }
+
+    buildWheel();
+
+    // Utility: compute rotation for a random spin
+    function computeRandomRotation(){
+      const extraSpins = 3 + Math.floor(Math.random() * 3); // 3-5 full spins
+      const jitter = (Math.random() - 0.5) * Math.min(angle * 0.5, 6); // small jitter degrees
+      return currentRotation + extraSpins * 360 + jitter;
+    }
+
+    // Spin procedure: apply random rotation and determine result based on final position
+    function spinToRandom(){
+      if(spinning) return;
+      spinning = true;
+      resultDiv.textContent = '';
+      spinAgainBtn.style.display = 'none';
+
+      const targetRotation = computeRandomRotation();
+      wheel.style.transition = 'transform 4.6s cubic-bezier(0.17, 0.67, 0.83, 0.67)';
+      wheel.style.transform = `rotate(${targetRotation}deg)`;
+
+      // Determine result after transition
+      setTimeout(() => {
+        const finalRotation = parseFloat(wheel.style.transform.match(/rotate\(([-0-9.]+)deg\)/)[1]) % 360;
+        const effectiveRotation = (360 - finalRotation + pointerAngle) % 360;
+        const sectionIndex = Math.floor(effectiveRotation / angle) % num;
+        const selected = sections[sectionIndex];
+        const displayText = selected.text.replace(/\n/g, ' ');
+        resultDiv.textContent = (username ? (username + ', you got: ') : 'You got: ') + displayText + '!';
+        spinning = false;
+        spinAgainBtn.style.display = 'inline-block';
+        currentRotation = targetRotation % 3600000; // keep number reasonable
+      }, 4600);
+    }
+
+    // Handlers
+    submitName.addEventListener('click', ()=>{
+      const val = nameInput.value.trim();
+      if(!val) return;
+      username = val;
+      nameInput.disabled = true;
+      submitName.disabled = true;
+      resetName.style.display = 'inline-block';
+      spinBtn.disabled = false;
+      resultDiv.textContent = `${username}, ready! Press Spin.`;
+    });
+
+    resetName.addEventListener('click', ()=>{
+      username = '';
+      nameInput.disabled = false;
+      submitName.disabled = false;
+      resetName.style.display = 'none';
+      spinBtn.disabled = true;
+      spinAgainBtn.style.display = 'none';
+      resultDiv.textContent = '';
+    });
+
+    spinBtn.addEventListener('click', ()=>{
+      spinToRandom();
+    });
+
+    spinAgainBtn.addEventListener('click', ()=>{
+      spinToRandom();
+    });
+
+    // support pressing Enter in input
+    nameInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter') submitName.click();
+    });
+
+    // accessibility: allow clicking SVG to draw wheel again if needed
+    wheel.addEventListener('click', ()=> buildWheel());
+
+    // initial state
+    spinBtn.disabled = true;
+    spinAgainBtn.style.display = 'none';
+    resetName.style.display = 'none';
+  </script>
+</body>
+</html>
